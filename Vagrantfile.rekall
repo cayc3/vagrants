@@ -1,0 +1,62 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+Vagrant.configure(2) do |config|
+
+  config.vm.box = "debian/jessie64"
+  config.vm.provider "virtualbox" do |v|
+    v.memory = 4048
+    v.cpus = 2
+  end
+
+   config.vm.network "private_network", ip: "192.168.56.101"
+
+   config.vm.synced_folder ".", "/home/vagrant/sync", disabled: true
+
+   config.vm.provision "shell", inline: <<-SHELL
+     sudo apt-get update
+     #sudo apt-get install -y linux-headers-$(uname -r) build-essential dkms
+     #wget "http://download.virtualbox.org/virtualbox/5.0.14/VBoxGuestAdditions_5.0.14.iso"
+     #sudo mkdir /media/VBoxGuestAdditions
+     #sudo mount -o loop,ro VBoxGuestAdditions_5.0.14.iso /media/VBoxGuestAdditions
+     #sudo sh /media/VBoxGuestAdditions/VBoxLinuxAdditions.run
+     #rm VBoxGuestAdditions_5.0.14.iso
+     #sudo umount /media/VBoxGuestAdditions
+     #sudo rmdir /media/VBoxGuestAdditions
+
+     #prereq
+     sudo mkdir /opt
+     sudo apt-get -y install automake libpython-all-dev python-pip git libssl-dev libncurses5-dev libtool make gcc flex bison libmagic-dev
+
+     #install yara
+     cd /opt
+     git clone https://github.com/virustotal/yara
+     cd yara
+     ./bootstrap.sh
+     ./configure --enable-magic
+     make
+     sudo make install
+     make check
+     sudo pip install yara-python
+
+     install rekall
+     sudo pip install --upgrade setuptools
+     pip install --upgrade six
+     cd /opt
+     git clone --recursive https://github.com/google/rekall
+     cd rekall
+     sudo python setup.py install
+     cd /opt/rekall/rekall-gui
+     mkdir rekall_gui
+     cp _version.py rekall_gui
+     sudo pip install -e ./
+
+     sudo chown -R vagrant:vagrant /opt
+     mkdir /tmp/rekall_test
+     cd ~; rekall webconsole --debug --host 192.168.56.101 --port 8111 --worksheet /tmp
+   SHELL
+end
