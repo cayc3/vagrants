@@ -1,0 +1,117 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+Vagrant.configure(2) do |config|
+
+  config.vm.box = "ubuntu/trusty64"
+  config.vm.provider "virtualbox" do |v|
+    v.memory = 2048
+    v.cpus = 2
+  end
+
+   config.vm.network "private_network", ip: "192.168.56.101"
+
+   config.vm.synced_folder ".", "/home/vagrant/sync", disabled: true
+
+   config.vm.provision "shell", inline: <<-SHELL
+
+     #install deps & fetch firmadyne
+     sudo apt-get update
+     #sudo apt-get install -y linux-headers-$(uname -r) build-essential dkms
+     #wget "http://download.virtualbox.org/virtualbox/5.0.14/VBoxGuestAdditions_5.0.14.iso"
+     #sudo mkdir /media/VBoxGuestAdditions
+     #sudo mount -o loop,ro VBoxGuestAdditions_5.0.14.iso /media/VBoxGuestAdditions
+     #sudo sh /media/VBoxGuestAdditions/VBoxLinuxAdditions.run
+     #rm VBoxGuestAdditions_5.0.14.iso
+     #sudo umount /media/VBoxGuestAdditions
+     #sudo rmdir /media/VBoxGuestAdditions
+     sudo apt-get -y install busybox-static fakeroot git kpartx netcat-openbsd nmap python-pip python-psycopg2 python3-psycopg2 snmp uml-utilities util-linux vlan
+     mkdir /opt
+     git clone --recursive https://github.com/firmadyne/firmadyne.git
+     cd ./firmadyne; ./download.sh
+
+     #install binwalk
+     sudo apt-get -y install python-lzma
+     sudo -H pip install git+https://github.com/ahupp/python-magic
+     cd /opt
+     git clone https://github.com/devttys0/binwalk.git
+     cd binwalk
+     sudo ./deps.sh
+     sudo python setup.py install
+
+     #install jefferson
+     sudo pip install cstruct
+     sudo apt-get -y install python-lzma
+     cd /opt
+     git clone https://github.com/sviehb/jefferson
+     cd jefferson
+     sudo python setup.py install
+
+     #install sasquatch
+     sudo apt-get -y install build-essential liblzma-dev liblzo2-dev zlib1g-dev
+     cd /opt
+     git clone https://github.com/devttys0/sasquatch
+     cd sasquatch
+     ./build.sh
+
+     #configure postgresql for firmadyne
+     sudo apt-get install postgresql
+     echo "CREATE USER firmadyne WITH PASSWORD 'firmadyne’;” > fd.sql
+     echo "CREATE DATABASE -O firmadyne firmware;” >> fd.sql
+     sudo su postgres psql —file=fd.sql
+     rm fd.sql
+     sudo su postgres psql -d firmware < /home/vagrant/firmadyne/database/schema
+
+     #install msf
+     sudo apt-add-repository ppa:brightbox/ruby-ng
+     sudo apt-get update
+     sudo apt-get -y install build-essential zlib1g zlib1g-dev libxml2 libxml2-dev libxslt-dev locate libreadline6-dev libcurl4-openssl-dev git-core libssl-dev libyaml-dev openssl autoconf libtool ncurses-dev bison curl wget postgresql postgresql-contrib libpq-dev libapr1 libaprutil1 libsvn1 libpcap-dev libsqlite3-dev libgmp-dev ruby2.2 ruby2.2-dev p7zip-full
+
+     echo "CREATE USER msf PASSWORD 'msfpasswd';" > msf.sql
+     echo "CREATE DATABASE msf OWNER msf;" >> msf.sql
+     sudo su postgres psql --file=msf.sql
+     rm msf.sql
+     cd /opt
+     sudo wget https://github.com/rapid7/metasploit-framework/archive/master.zip
+     sudo 7z x master.zip
+     sudo mv metasploit-framework-master metasploit-framework
+     sudo chown -R vagrant:vagrant /opt/metasploit-framework
+     cd metasploit-framework
+     sudo gem install bundler
+     sudo su vagrant bundle install
+     sudo chown -R vagrant:vagrant /home/vagrant/.msf4
+     sudo chown -R vagrant:vagrant /var/lib/gems
+     sudo bash -c 'for MSF in $(ls msf*); do ln -s /opt/metasploit-framework/$MSF /usr/local/bin/$MSF;done'
+     sudo rm -rf /opt/metasploit-framework/config/database.yml
+     echo "production:" > /opt/metasploit-framework/config/database.yml
+     echo "adapter: postgresql" >> /opt/metasploit-framework/config/database.yml
+     echo "database: msf" >> /opt/metasploit-framework/config/database.yml
+     echo "username: msf" >> /opt/metasploit-framework/config/database.yml
+     echo "password: msfpasswd" >> /opt/metasploit-framework/config/database.yml
+     echo "host: 127.0.0.1" >> /opt/metasploit-framework/config/database.yml
+     echo "port: 5432" >> /opt/metasploit-framework/config/database.yml
+     echo "pool: 75" >> /opt/metasploit-framework/config/database.yml
+     echo "timeout: 5" >> /opt/metasploit-framework/config/database.yml
+     sudo sh -c 'echo export MSF_DATABASE_CONFIG=/opt/metasploit-framework/config/database.yml' >> /etc/profile
+     echo 'export MSF_DATABASE_CONFIG=/opt/metasploit-framework/config/database.yml' | sudo tee --append /etc/profile
+     source /etc/profile
+     sudo msfupdate
+     #msfconsole
+
+     #install firmwalker
+     cd /opt
+     sudo apt-get install squashfs-tools elfutils
+     sudo git clone https://github.com/craigz28/firmwalker
+
+     #install qemu
+     sudo apt-get -y install qemu-system-arm qemu-system-mips qemu-system-x86 qemu-utils
+
+     #install desktop
+     #sudo apt-get install mate-desktop
+
+   SHELL
+end
