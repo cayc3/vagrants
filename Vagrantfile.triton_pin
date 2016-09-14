@@ -50,10 +50,10 @@ Vagrant.configure(2) do |config|
      cd build
      cmake -DPINTOOL=on ..
      make
-     cd ..
-     ./triton ./src/examples/pin/ir.py /usr/bin/id
-     sudo make -j2 install
-     pip install rpyc
-     rpyc_classic.py
+     sudo ln -s triton /usr/local/bin
+     #cd ..
+     #./triton ./src/examples/pin/ir.py /usr/bin/id
+     #pip install rpyc
+     #rpyc_classic.py
    SHELL
 end
