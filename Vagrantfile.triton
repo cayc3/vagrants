@@ -33,13 +33,13 @@ Vagrant.configure(2) do |config|
      #install deps
      echo "deb http://http.us.debian.org/debian/ testing non-free contrib main" | sudo tee --append /etc/apt/sources.list
      sudo apt-get update
-     sudo apt-get install -y libpython-all-dev python-pip cmake git
+     sudo apt-get -y install libpython-all-dev python-pip cmake git
      #boost
-     sudo apt-get install -y libboost-all-dev
+     sudo apt-get -y install libboost-all-dev
      #z3
-     sudo apt-get -t testing install -y libz3-dev python-z3
+     sudo apt-get -y -t testing install libz3-dev python-z3
      #capstone
-     sudo apt-get -t testing install -y libcapstone-dev python-capstone
+     sudo apt-get -y -t testing install libcapstone-dev python-capstone
      
      #install triton
      curl -k -L https://software.intel.com/sites/landingpage/pintool/downloads/pin-2.14-71313-gcc.4.4.7-linux.tar.gz | tar xz
