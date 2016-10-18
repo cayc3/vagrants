@@ -1,0 +1,66 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+Vagrant.configure(2) do |config|
+
+  config.vm.box = "debian/jessie64"
+  config.vm.provider "virtualbox" do |v|
+    v.memory = 4048
+    v.cpus = 2
+  end
+
+   config.vm.network "private_network", ip: "192.168.56.101"
+
+   config.vm.synced_folder ".", "/home/vagrant/sync", disabled: true
+
+   config.vm.provision "shell", inline: <<-SHELL
+     sudo apt-get update
+     #sudo apt-get install -y linux-headers-$(uname -r) build-essential dkms
+     #wget "http://download.virtualbox.org/virtualbox/5.0.14/VBoxGuestAdditions_5.0.14.iso"
+     #sudo mkdir /media/VBoxGuestAdditions
+     #sudo mount -o loop,ro VBoxGuestAdditions_5.0.14.iso /media/VBoxGuestAdditions
+     #sudo sh /media/VBoxGuestAdditions/VBoxLinuxAdditions.run
+     #rm VBoxGuestAdditions_5.0.14.iso
+     #sudo umount /media/VBoxGuestAdditions
+     #sudo rmdir /media/VBoxGuestAdditions
+     
+     #install java & testing
+     echo 'deb http://ftp.debian.org/debian stretch main' | sudo tee -a /etc/apt/sources.list.d/stretch.list
+     echo 'APT::Default-Release "jessie";' | sudo tee -a /etc/apt/apt.conf.d/default-release
+     echo "deb http://ppa.launchpad.net/webupd8team/java/ubuntu xenial main" | sudo tee /etc/apt/sources.list.d/webupd8team-java.list
+     echo "deb-src http://ppa.launchpad.net/webupd8team/java/ubuntu xenial main" | sudo tee -a /etc/apt/sources.list.d/webupd8team-java.list
+     sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys EEA14886
+     sudo apt-get update
+     echo 'oracle-java8-installer shared/accepted-oracle-license-v1-1 select true' | sudo /usr/bin/debconf-set-selections
+     sudo apt-get install -y oracle-java8-installer
+     #base dir
+     sudo apt-get install -y git build-essential golang
+     
+     #elastic
+     wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-5.0.0-rc1.deb
+     sudo dpkg -i elasticsearch-5.0.0-rc1.deb; sudo apt-get install -f
+     
+     #logstash
+     wget https://artifacts.elastic.co/downloads/logstash/logstash-5.0.0-rc1.deb
+     sudo dpkg -i logstash-5.0.0-rc1.deb; sudo apt-get install -f
+     sudo chmod 0644 /etc/logrotate.d/logstash
+     
+     #kibana
+     wget https://artifacts.elastic.co/downloads/kibana/kibana-5.0.0-rc1-amd64.deb
+     sudo dpkg -i kibana-5.0.0-rc1-amd64.deb; sudo apt-get install -f
+     echo 'server.host: "0.0.0.0"' | sudo tee -a /etc/kibana/kibana.yml
+
+     #install xpack
+     cd /usr/share/elasticsearch
+     sudo bin/elasticsearch-plugin install --batch x-pack
+     sudo /etc/init.d/elasticsearch start
+     cd /usr/share/kibana
+     sudo bin/kibana-plugin install --batch x-pack
+     sudo /etc/init.d/kibana start
+     #visit http://localhost:5601/
+   SHELL
+end
