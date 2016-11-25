@@ -103,6 +103,6 @@ Vagrant.configure(2) do |config|
      sudo systemctl enable volutility.service
      #sleep 10
      #sudo systemctl start volutility.service
-     /usr/local/bin/volutilstart.sh
+     /usr/local/bin/volutilstart.sh&
    SHELL
 end
