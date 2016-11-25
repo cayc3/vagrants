@@ -69,7 +69,7 @@ Vagrant.configure(2) do |config|
      gunzip GeoLite2-City.mmdb.gz
      mv GeoLite2-City.mmdb /usr/share/GeoIP
      sudo apt-get install -y libimage-exiftool-perl
-     #install kevskit
+     #install volutility
      cd /opt
      sudo git clone https://github.com/kevthehermit/VolUtility
      sudo chown -R vagrant:vagrant /opt/VolUtility
