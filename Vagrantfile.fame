@@ -1,0 +1,125 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+Vagrant.configure(2) do |config|
+
+  config.vm.box = "debian/jessie64"
+  config.vm.provider "virtualbox" do |v|
+    v.memory = 8048
+    v.cpus = 2
+  end
+
+   config.vm.network "private_network", ip: "192.168.56.101"
+
+   config.vm.synced_folder ".", "/home/vagrant/sync", disabled: true
+
+   config.vm.provision "shell", inline: <<-SHELL
+    sudo apt-get update
+    sudo apt-get upgrade -y
+    install guest tools
+    sudo apt-get install -y linux-headers-$(uname -r) build-essential dkms
+    wget "http://download.virtualbox.org/virtualbox/5.1.20/VBoxGuestAdditions_5.1.20.iso"
+    sudo mkdir /opt/VBoxGuestAdditions
+    sudo mount -o loop,ro VBoxGuestAdditions_5.1.20.iso /opt/VBoxGuestAdditions
+    sudo sh /opt/VBoxGuestAdditions/VBoxLinuxAdditions.run
+    rm VBoxGuestAdditions_5.1.20.iso
+    sudo umount /opt/VBoxGuestAdditions
+    sudo rmdir /opt/VBoxGuestAdditions
+    #reqs
+    sudo apt-get install -y git python-pip python-dev libssl-dev
+    sudo pip install --upgrade pip
+    sudo pip install --upgrade cryptography
+    sudo pip install virtualenv
+
+    #install mongo
+    sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 0C49F3730359A14518585931BC711F9BA15703C6
+    echo "deb http://repo.mongodb.org/apt/debian jessie/mongodb-org/3.4 main" | sudo tee /etc/apt/sources.list.d/mongodb-org-3.4.list
+    sudo apt-get update
+    sudo apt-get install -y mongodb-org
+    echo 'db.addUser({user:"admin", pwd:"CHANGEME", roles:["userAdminAnyDatabase", db: "admin"]})'
+    echo 'db.addUser({user:"fame", pwd:"CHANGEME", roles:["dbOwner", db: "fame"]})'
+    sudo systemctl enable mongod
+    sudo systemctl start mongod
+
+    #mongo auth:
+    sed -i -e 's/authorization: disabled/authorization: enabled/g' /etc/mongod.conf
+    sudo systemctl restart mongod
+
+    #Install FAME
+    cd /opt
+    sudo useradd -s /bin/bash -r -M -d /home/shorofsky shorofsky
+    echo 'shorofsky:laGuardia' | sudo chpasswd
+    sudo git clone https://github.com/certsocietegenerale/fame
+    sudo chown -R vagrant /opt/fame
+    cd /opt/fame
+    sed -i -e 's/password = ""/password = "CHANGEME"/g' /opt/fame/utils/__init__.py
+    sed -i '$d' /opt/fame/requirements.txt
+    echo git+https://github.com/g2p/rfc6266#egg=rfc6266 | sudo tee -a /opt/fame/requirements.txt
+    cd /opt/fame
+    wget https://gist.githubusercontent.com/cayc3/bb577bde645e740047d6f14c3cd06d1a/raw/44ee28627b65418344ff2f063c28359b09ad5474/create_user.py
+    wget https://gist.githubusercontent.com/cayc3/bb577bde645e740047d6f14c3cd06d1a/raw/44ee28627b65418344ff2f063c28359b09ad5474/install.py
+    mv /opt/fame/create_user.py /opt/fame/utils/create_user.py
+    mv /opt/fame/install.py /opt/fame/utils/install.py
+    sudo chown -R shorofsky:shorofsky /opt/fame
+    sudo -u shorofsky -s /bin/bash -c 'utils/run.sh utils/install.py'
+
+    #Install Server
+    sudo pip install uwsgi
+
+    #Server
+    echo '[Unit]' | sudo tee /etc/systemd/system/fame_web.service
+    echo 'Description=FAME Web Server' | sudo tee -a /etc/systemd/system/fame_web.service
+    echo '[Service]' | sudo tee -a /etc/systemd/system/fame_web.service
+    echo 'Type=simple' | sudo tee -a /etc/systemd/system/fame_web.service
+    echo 'ExecStart=/bin/bash -c "cd /opt/fame && uwsgi -H /opt/fame/env --uid shorofsky --gid shorofsky --socket /tmp/fame.sock --chmod-socket=660 --chown-socket shorofsky:www-data -w webserver --callable app"' | sudo tee -a /etc/systemd/system/fame_web.service
+    echo '[Install]' | sudo tee -a /etc/systemd/system/fame_web.service
+    echo 'WantedBy=multi-user.target' | sudo tee -a /etc/systemd/system/fame_web.service
+
+    #Worker
+    echo '[Unit]' | sudo tee -a /etc/systemd/system/fame_worker.service
+    echo 'Description=FAME Workers' | sudo tee -a /etc/systemd/system/fame_worker.service
+    echo '[Service]' | sudo tee -a /etc/systemd/system/fame_worker.service
+    echo 'Type=simple' | sudo tee -a /etc/systemd/system/fame_worker.service
+    echo 'User=shorofsky' | sudo tee -a /etc/systemd/system/fame_worker.service
+    echo 'ExecStart=/bin/bash -c "cd /opt/fame && utils/run.sh worker.py"' | sudo tee -a /etc/systemd/system/fame_worker.service
+    echo '[Install]' | sudo tee -a /etc/systemd/system/fame_worker.service
+    echo 'WantedBy=multi-user.target' | sudo tee -a /etc/systemd/system/fame_worker.service
+
+    #Service & Launch
+    sudo systemctl enable fame_web
+    sudo systemctl enable fame_worker
+    sudo systemctl restart fame_web
+    sudo systemctl restart fame_worker
+
+    #install nginx
+    cd ~
+    sudo apt-get install -y nginx
+    sudo rm /etc/nginx/sites-enabled/default
+    sudo echo "upstream fame {" >> site
+    sudo echo "    server unix:///tmp/fame.sock;" >> site
+    sudo echo "}" >> site
+    sudo echo "" >> site
+    sudo echo "server {" >> site
+    sudo echo "    listen 80 default_server;" >> site
+    sudo echo "" >> site
+    sudo echo "    # Allows big file upload" >> site
+    sudo echo "    client_max_body_size 0;" >> site
+    sudo echo "" >> site
+    sudo echo "    location / {" >> site
+    sudo echo "      include uwsgi_params;" >> site
+    sudo echo "      uwsgi_pass fame;" >> site
+    sudo echo "    }" >> site
+    sudo echo "" >> site
+    sudo echo "    location /static/ {" >> site
+    sudo echo "      alias /opt/fame/web/static/;" >> site
+    sudo echo "    }" >> site
+    sudo echo "}" >> site
+    sudo mv site /etc/nginx/sites-available/fame
+    sudo ln -s /etc/nginx/sites-available/fame /etc/nginx/sites-enabled/fame
+    sudo systemctl restart nginx
+   SHELL
+end
